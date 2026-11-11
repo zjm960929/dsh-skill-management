@@ -4,6 +4,15 @@
   "description": "Skill management for DeepSeek Harness — browse, install, edit, enable/disable and uninstall skills per workspace and globally from a left-sidebar panel. | DeepSeek Harness 技能管理——在左侧栏管理每个工作区与全局安装的技能，支持导入、编辑、启用/停用和卸载。",
   "icon": "./icon.svg",
   "license": "MIT",
+  "author": "ZJM <zjm960929@outlook.com> (https://github.com/zjm960929)",
+  "homepage": "https://github.com/zjm960929/dsh-skill-management#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zjm960929/dsh-skill-management.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zjm960929/dsh-skill-management/issues"
+  },
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
@@ -37,6 +46,9 @@
   "engines": {
     "node": "^22.15.0 || >=24.0.0"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
@@ -53,6 +65,7 @@
   },
   "scripts": {
     "check": "node --check lib/index.js && node --check lib/skill-store.js && node --check lib/client.js",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "prepublishOnly": "node --check lib/index.js && node --check lib/skill-store.js && node --check lib/client.js"
   }
 }
