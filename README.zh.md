@@ -50,10 +50,12 @@ English | [中文](README.zh.md)
 ### 通过 CLI
 
 ```powershell
-dsh plugin --profile web add npm:dsh-skill-management
+dsh plugin add dsh-skill-management
 # 或本地开发目录
-dsh plugin --profile web add C:\path\to\dsh-skill-management
+dsh plugin add C:\path\to\dsh-skill-management
 ```
+
+需要装到指定 profile 时再加 `--profile <名称>`，例如 `dsh plugin --profile web add dsh-skill-management`。
 
 Desktop profile 由官方 Desktop 应用管理，请优先使用应用内的 **Plugins** 页面。
 

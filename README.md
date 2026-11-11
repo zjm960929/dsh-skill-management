@@ -50,10 +50,12 @@ In DSH, open **Plugins**, search for `dsh-skill-management` (once published), or
 ### Through the CLI
 
 ```powershell
-dsh plugin --profile web add npm:dsh-skill-management
+dsh plugin add dsh-skill-management
 # or a local development checkout
-dsh plugin --profile web add C:\path\to\dsh-skill-management
+dsh plugin add C:\path\to\dsh-skill-management
 ```
+
+Add `--profile <name>` to target a specific profile, for example `dsh plugin --profile web add dsh-skill-management`.
 
 The Desktop profile is managed by the official Desktop app; prefer its **Plugins** page there.
 
