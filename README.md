@@ -1,29 +1,145 @@
-# dsh-skill-management — Skill Management for DeepSeek Harness
+# dsh-skill-management
 
-**Display name:** 技能管理 (Skill Management)  
-**npm package:** `dsh-skill-management`
+**Skill management for DeepSeek Harness — one panel for every workspace and global filesystem skill.**
 
-A left-sidebar skill manager for DeepSeek Harness. It brings every filesystem skill installed in each workspace and globally into one panel, where you can browse, import, edit, enable/disable and uninstall them, with clear source, shadowing and validity information.
+[![npm version](https://img.shields.io/npm/v/dsh-skill-management.svg)](https://www.npmjs.com/package/dsh-skill-management)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-skill-management.svg)](https://www.npmjs.com/package/dsh-skill-management)
+[![license](https://img.shields.io/npm/l/dsh-skill-management.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.15-339933)](https://nodejs.org/)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-0.2.x-4F46E5)](https://github.com/deepseek-ai/deepseek-harness)
 
 English | [中文](README.zh.md)
 
+`dsh-skill-management` adds a **Skill** entry to the DeepSeek Harness left sidebar, directly below **Plugins**, and opens a full management panel in the main area. It manages the same filesystem skill roots DSH discovers: `.dsh/skills` and `.agents/skills`, for the current workspace and globally.
+
+It is for people who install, edit, or debug skills by hand and want a safe UI instead of editing directories and frontmatter directly.
+
+> **Sidebar label:** Skill · **Panel title:** Skill Management · **Scope:** global and workspaces
+
+## Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Skill format](#skill-format)
+- [Skill directories](#skill-directories)
+- [How it works](#how-it-works)
+- [HTTP API](#http-api)
+- [Safety and limitations](#safety-and-limitations)
+- [Development](#development)
+- [Releasing](#releasing)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Features
 
-- **Left-sidebar entry**: adds a “技能管理” row to the DSH sidebar and opens a full management panel in the main area.
-- **Per scope**: one group for global skills and one for each registered workspace, following the workspace titles DSH already knows.
-- **Two skill directories per scope**: manages both `.dsh/skills` and `.agents/skills`, matching DSH's own filesystem provider discovery rules.
-- **Install paths**:
-  - the install scope is independent of the current view: **Install skill** lets you choose global or any workspace;
-  - import a local folder or a single `.md` file (a leading `~` is expanded);
-  - copy a skill from another workspace or from global;
-  - create a skill from a form;
-  - paste a `SKILL.md` or read one from a file.
-- **Disable without deleting**: disabling renames `SKILL.md` to `SKILL.md.disabled` (or `<name>.md` to `<name>.md.disabled`), so DSH stops discovering it immediately. Re-enabling restores it; content and resources are untouched.
-- **Inline editing**: edit `SKILL.md` directly and validate frontmatter, name, description and invocation policy against DSH's rules before saving.
-- **Preview and locate**: read the full document, source, on-disk path and update time, and copy the path in one click.
-- **Shadowing hints**: duplicate names are marked “Shadowed” / “Overrides global” using DSH's rank rules, so a skill that does not win is never a mystery.
-- **Bilingual UI**: follows the active DSH language live (Chinese / English).
-- **Owner-only API**: every mutation goes through DSH's `connection.admit()` and owner check, failing closed.
+- **Native sidebar entry** — a **Skill** row directly below **Plugins**; the management panel opens in the main area, not in a modal or separate window.
+- **Global and per-workspace scopes** — one group for global skills and one for every workspace registered in DSH.
+- **Both skill roots per scope** — manages `.dsh/skills` and `.agents/skills`, matching DSH's own filesystem discovery and rank rules.
+- **Multiple install sources** — import a local folder or `.md` file, copy from another workspace or global, create from a form, or paste/read a `SKILL.md`.
+- **Disable without deleting** — disabling renames the instruction file so DSH stops discovering it immediately; enabling restores it with content and resources intact.
+- **Validated editing** — edit `SKILL.md` in place; the plugin validates frontmatter, skill name, description and invocation flags before saving.
+- **Preview and metadata** — inspect the full document, source, on-disk path, size and update time, and copy the path in one click.
+- **Shadowing hints** — duplicate skill names show **Shadowed**, **Overrides global** or **Overridden in N workspaces** using DSH's rank rules.
+- **Search and filters** — search by name, description or path; filter by enabled state or by skill directory.
+- **Bilingual UI** — follows the active DSH language in real time (Chinese / English).
+- **Owner-only writes** — every API request goes through DSH's `connection.admit()` gate and owner check, failing closed.
+
+## Requirements
+
+- **DeepSeek Harness** `0.2.x` (Desktop or Web). The current verification target is `0.2.2-rc.1` on Desktop.
+- **Node.js** `22.15+` on the 22.x line, or `24+`.
+- **Cordis** `>=4.0.0-rc <5` as a peer dependency, provided by DSH.
+- No additional runtime dependencies.
+
+## Installation
+
+### From the DSH Plugins page
+
+Open **Plugins** in DSH, search for `dsh-skill-management`, and install it. Reload or restart DSH when prompted.
+
+### From the CLI
+
+```bash
+dsh plugin --profile web add dsh-skill-management
+```
+
+Use the profile you actually run, for example `--profile desktop`. The Desktop profile is managed by the official Desktop app, so prefer its **Plugins** page there.
+
+### From a local checkout
+
+```bash
+dsh plugin --profile web add C:\path\to\dsh-skill-management
+```
+
+For a packaged local build, install the tarball instead:
+
+```bash
+pnpm pack
+dsh plugin --profile web add ./dsh-skill-management-<version>.tgz
+```
+
+A tarball install is a normal package copy, not a symlink. It replaces a same-name npm install until you restore the published package.
+
+## Usage
+
+1. Open **Skill** in the left sidebar, directly below **Plugins**.
+2. Choose **Global** or a workspace on the left.
+3. Narrow the list with search, the **All / Enabled / Disabled** filter, or a directory chip.
+4. Use **Preview**, **Edit**, **Enable / Disable** or **Uninstall** on a skill card.
+5. Click **Install skill** to add a new skill.
+
+### Installing a skill
+
+The install dialog is independent of the scope you are currently viewing. Pick the target scope first, then the target directory:
+
+| Source | What it does |
+| --- | --- |
+| **Local path** | Copies a skill folder containing `SKILL.md`, or a single `.md` file. A leading `~` is expanded. |
+| **Copy skill** | Copies an existing skill from another workspace or from global. The source is left unchanged. |
+| **Create** | Writes a new `SKILL.md` from the name, description, optional `whenToUse`, body and invocation checkboxes. |
+| **Paste SKILL.md** | Accepts raw `SKILL.md` content, or reads it from a file, and installs it as a directory bundle. |
+
+The current view is only the default target. You can install into global, the current workspace, or any other workspace from the same dialog.
+
+### Enable, disable and uninstall
+
+- **Disable** renames the instruction file; nothing is deleted.
+  - Directory bundle: `SKILL.md` → `SKILL.md.disabled`
+  - Flat skill: `<name>.md` → `<name>.md.disabled`
+- **Enable** reverses the rename.
+- **Uninstall** permanently deletes the skill directory or flat file, including its resources. The UI always asks for confirmation.
+
+## Skill format
+
+A skill is either a **directory bundle** (`<name>/SKILL.md` plus resources) or a **flat file** (`<name>.md`). Both use YAML frontmatter:
+
+```markdown
+---
+name: release-notes
+description: "Turn a list of commits into user-facing release notes."
+whenToUse: "When preparing a GitHub release."
+disable-model-invocation: false
+user-invocable: true
+---
+
+1. Read the commit range.
+2. Group changes by user impact.
+3. Write concise release notes.
+```
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `name` | Yes | Lowercase letters, digits and single hyphens only. DSH keys the skill by this value. |
+| `description` | Yes | Non-empty summary shown in the catalog. |
+| `whenToUse` | No | Optional routing hint for the model. |
+| `disable-model-invocation` | No | `true` prevents model invocation; the skill remains user-invocable with `/`. |
+| `user-invocable` | No | `false` prevents `/name` invocation. |
+
+DSH rejects the legacy names `disableModelInvocation`, `modelInvocable` and `userInvocable`; use the canonical hyphenated fields above.
+
+The installer writes a directory bundle named after the frontmatter `name`. If a folder name and the frontmatter `name` differ, DSH still resolves the skill by the frontmatter name.
 
 ## Skill directories
 
@@ -36,86 +152,135 @@ English | [中文](README.zh.md)
 
 `<project>` follows DSH: the nearest ancestor of the workspace directory that contains `.git`, otherwise the workspace directory itself.
 
-A skill is either:
+Lower rank wins when the same skill name appears more than once in a scope. Workspace skills shadow global skills; the panel shows those relationships on the cards.
 
-- a **directory bundle**: `<root>/<name>/SKILL.md` plus any resources;
-- a **flat file**: `<root>/<name>.md`.
+## How it works
 
-## Installation
+The plugin has a Host half and a browser half:
 
-### Through Plugins
-
-In DSH, open **Plugins**, search for `dsh-skill-management` (once published), or use the absolute path of this repository as the install source. Reload or restart when prompted.
-
-### Through the CLI
-
-```powershell
-dsh plugin add dsh-skill-management
-# or a local development checkout
-dsh plugin add C:\path\to\dsh-skill-management
+```text
+┌─────────────────────────────┐
+│ DSH main panel (React)      │
+│ search / install / edit     │
+└──────────────┬──────────────┘
+               │ owner-only HTTP
+┌──────────────▼──────────────┐
+│ Host API                    │
+│ /skill-management/api/*     │
+│ scan / validate / mutate    │
+└──────────────┬──────────────┘
+               │ Node fs
+┌──────────────▼──────────────┐
+│ .dsh/skills, .agents/skills │
+│ workspace + global roots    │
+└─────────────────────────────┘
 ```
 
-Add `--profile <name>` to target a specific profile, for example `dsh plugin --profile web add dsh-skill-management`.
+- The Host half registers the HTTP surface on `ctx.webServer` and reads the workspace list from `ctx.workspaceRegistry`.
+- `lib/skill-store.js` is pure Node.js; it scans the four roots, parses frontmatter, validates names and invocation flags, and performs install, rename, save and delete operations.
+- The browser half registers a `sidebar.panellist` entry with `order: 1` (DSH's **Plugins** row uses `0`, **Automation tasks** uses `10`) and the corresponding `main` panel key.
+- There is no build step; `lib/client.js` is the shipped browser bundle.
 
-The Desktop profile is managed by the official Desktop app; prefer its **Plugins** page there.
-
-## Usage
-
-1. Click **技能管理** in the left sidebar.
-2. Pick **Global** or a workspace on the left.
-3. Narrow the list with search, enabled-state filters or a directory chip.
-4. Use **Preview / Edit / Enable or Disable / Uninstall** on a skill card, or click **Install skill**.
-5. Choose the **install scope** (global or any workspace), then the target directory (`.dsh/skills` or `.agents/skills`) and a source. The scope is not limited by the current view; after installation the panel switches to the target scope and shows the new skill.
-
-Uninstall deletes the whole skill directory or flat file from disk and always asks for confirmation. Use **Disable** when you only want to turn a skill off temporarily.
-
-## Safety and boundaries
-
-- Only entries inside the four known roots above are read or changed. A request's `relPath` must be a single entry name directly inside its root; `..`, absolute paths and path separators are rejected.
-- Every HTTP mutation completes `connection.admit()` before the body is read and requires `peer.principal.kind === "owner"`. Without the connection service the API answers 503 instead of falling open.
-- Copying a skill copies only regular files and directories, skips symlinks, `.git` and `node_modules`, and caps files (400), total size (24 MiB) and folder depth (12).
-- DSH built-in or plugin-registered runtime skills (for example the official `office` skill, or skills injected with `ctx.skills.register()`) have no manageable filesystem entry and are not listed. The panel manages the four filesystem roots above only.
-- Extra `customSkillDirs` configured for `skill-filesystem` are not shown; the panel covers only the four standard workspace and global roots.
-- Enable/disable works through file renames, so DSH's filesystem watcher sees the change. If a session's skill catalog is still cached, switch sessions or refresh the page.
-- Duplicate names in one root are shown with shadowing hints, but edit/uninstall always target the exact row you clicked.
+The panel reads state on demand; it does not keep a second copy of skill content or metadata.
 
 ## HTTP API
 
+All routes require an owner connection and answer `401`, `403` or `503` when the DSH admission gate does not pass.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/skill-management/api/state` | Global and per-workspace skills plus directory state |
-| GET | `/skill-management/api/skill?rootId=&relPath=` | Read one raw `SKILL.md` |
-| POST | `/skill-management/api/install` | Install (`path` / `copy` / `create` / `text`) |
-| POST | `/skill-management/api/uninstall` | Uninstall |
-| POST | `/skill-management/api/toggle` | Enable / disable |
-| POST | `/skill-management/api/save` | Save edited `SKILL.md` |
-| POST | `/skill-management/api/validate` | Validate frontmatter only |
+| `GET` | `/skill-management/api/state` | Global and per-workspace skills, roots and statistics |
+| `GET` | `/skill-management/api/skill?rootId=&relPath=` | Read one raw `SKILL.md` |
+| `POST` | `/skill-management/api/install` | Install from `path`, `copy`, `create` or `text` |
+| `POST` | `/skill-management/api/uninstall` | Delete a skill directory or flat file |
+| `POST` | `/skill-management/api/toggle` | Enable or disable |
+| `POST` | `/skill-management/api/save` | Save edited `SKILL.md` after validation |
+| `POST` | `/skill-management/api/validate` | Validate frontmatter without writing |
+
+The HTTP API is internal to this plugin and may change between minor releases.
+
+## Safety and limitations
+
+### Safety
+
+- Only entries inside the four known roots are read or changed. A request's `relPath` must be a single entry name directly inside its root; `..`, absolute paths and path separators are rejected.
+- All API requests pass through `connection.admit()` before any body is read and require `peer.principal.kind === "owner"`.
+- Editing refuses a symlinked `SKILL.md`, so a save cannot follow a link outside the skill root.
+- Copying a skill copies only regular files and directories, skips symlinks, `.git` and `node_modules`, and caps files (400), total size (24 MiB) and folder depth (12).
+- Uninstall is permanent and always asks for confirmation in the UI.
+
+### Limitations
+
+- The panel manages the four filesystem roots above only. DSH built-in or plugin-registered runtime skills (for example the official `office` skill, or skills injected with `ctx.skills.register()`) are not listed.
+- Extra `customSkillDirs` configured for `skill-filesystem` are not shown.
+- Symlinked instruction files can be listed and read, but cannot be edited through the panel; copied skills skip symlinks entirely.
+- There are no bulk actions; skills are managed one card at a time.
+- Enable/disable relies on DSH's filesystem watcher. If a session's skill catalog is still cached, switch sessions or refresh the page.
+- The HTTP API is internal and may change between minor releases.
+- The plugin does not manage skill dependencies, versions or remote registries.
 
 ## Development
 
-```
-lib/index.js         Cordis host plugin entry + HTTP API
-lib/skill-store.js   Pure Node skill scan / validation / mutation logic
-lib/client.js        Web client bundle (sidebar row + main panel)
-locale/*.json        Plugins-page display metadata
-test/                Temporary-directory unit tests
+### Repository layout
+
+```text
+lib/
+  index.js          Cordis Host entry and HTTP API
+  skill-store.js    scanning, validation and mutation logic
+  client.js         browser bundle: sidebar row and main panel
+locale/
+  en.json           Plugins-page display metadata
+  zh.json
+test/
+  api.test.mjs
+  client-bundle.test.mjs
+  skill-store.test.mjs
+cordis.patch.yml    bundle row inserted into the DSH profile
 ```
 
-Checks:
+There is no build step. Edit `lib/client.js` directly and reload the browser after changes.
 
-```powershell
-node --check lib/index.js
-node --check lib/skill-store.js
-node --check lib/client.js
+### Checks and tests
+
+```bash
+npm run check
+npm test
+```
+
+`npm run check` runs `node --check` on the three shipped JavaScript files. The tests create isolated temporary directories and never touch real skills.
+
+If `node --test` cannot spawn child processes in a restricted sandbox, run each test file directly:
+
+```bash
 node test/skill-store.test.mjs
+node test/api.test.mjs
+node test/client-bundle.test.mjs
 ```
 
-## Compatibility
+### Local package smoke test
 
-- DeepSeek Harness `0.2.x` (Desktop / Web).
-- Node.js `22.15+` or `24+`.
-- Cordis `>=4.0.0-rc <5`.
+```bash
+pnpm pack
+dsh plugin --profile <profile> add ./dsh-skill-management-<version>.tgz
+```
+
+A tarball install is a copy, not a symlink. It replaces a same-name npm install; restore the published package when the smoke test is done.
+
+## Releasing
+
+Releases are published by `.github/workflows/publish.yml` when a `v*` tag is pushed. The workflow checks that the tag matches `package.json` and publishes with npm provenance using the `NPM_TOKEN` repository secret.
+
+```bash
+npm version patch
+git push --follow-tags
+```
+
+Do not publish manually from a workstation; let the workflow own the release.
+
+## Contributing
+
+Issues and pull requests are welcome. Keep changes focused on one plugin, run the checks above, and update `README.md` and `README.zh.md` together when behavior or UI text changes.
 
 ## License
 
-MIT
+[MIT](LICENSE)

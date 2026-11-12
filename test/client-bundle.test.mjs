@@ -75,8 +75,8 @@ test("client bundle registers the sidebar row and main panel", async () => {
 
   assert.equal(harness.dictionaries.length, 1);
   assert.equal(harness.dictionaries[0].ns, "skillManagement");
-  assert.equal(harness.dictionaries[0].dict.zh.panel, "技能管理");
-  assert.equal(harness.dictionaries[0].dict.en.panel, "Skill Management");
+  assert.equal(harness.dictionaries[0].dict.zh.panel, "技能");
+  assert.equal(harness.dictionaries[0].dict.en.panel, "Skill");
 
   const main = harness.registrations.find((registration) => registration.options.name === "main");
   const sidebar = harness.registrations.find((registration) => registration.options.name === "sidebar.panellist");
@@ -86,6 +86,7 @@ test("client bundle registers the sidebar row and main panel", async () => {
   assert.equal(typeof main.options.inject().useLanguage, "function");
   assert.ok(sidebar, "sidebar.panellist slot registered");
   assert.equal(sidebar.options.id, "skill-management");
+  assert.equal(sidebar.options.order, 1);
   assert.equal(sidebar.options.label(), "panel");
   assert.equal(typeof sidebar.component, "function");
   assert.equal(harness.appended.length, 1, "stylesheet appended once");
