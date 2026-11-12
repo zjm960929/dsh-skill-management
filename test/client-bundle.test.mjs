@@ -8,7 +8,7 @@ function installBrowserGlobals() {
   const ReactMock = {
     createElement: (type, props, ...children) => ({ type, props, children }),
     Fragment: Symbol("Fragment"),
-    useState: () => [undefined, () => {}],
+    useState: (initial) => [typeof initial === "function" ? initial() : initial, () => {}],
     useEffect: () => {},
     useMemo: (factory) => factory(),
     useCallback: (fn) => fn,
@@ -84,12 +84,14 @@ test("client bundle registers the sidebar row and main panel", async () => {
   assert.equal(main.options.key, "skill-management");
   assert.equal(typeof main.component, "function");
   assert.equal(typeof main.options.inject().useLanguage, "function");
+  assert.equal(typeof main.options.inject().pickDirectory, "function");
   assert.ok(sidebar, "sidebar.panellist slot registered");
   assert.equal(sidebar.options.id, "skill-management");
   assert.equal(sidebar.options.order, 1);
   assert.equal(sidebar.options.label(), "panel");
   assert.equal(typeof sidebar.component, "function");
   assert.equal(harness.appended.length, 1, "stylesheet appended once");
+  assert.match(harness.appended[0].textContent, /\.skm-actionDanger\{color:/);
 
   const icon = sidebar.component({ size: 18 });
   assert.equal(typeof icon.type, "function");
@@ -119,7 +121,63 @@ test("client bundle exposes the page component and install-scope labels", async 
   const zh = harness.dictionaries.length === 0
     ? (exports.apply(harness.ctx), harness.dictionaries[0].dict.zh)
     : harness.dictionaries[0].dict.zh;
-  for (const key of ["title", "subtitle", "install", "emptyTitle", "errInvalidName", "sourceProjectDsh", "installScope", "installScopeHint"]) {
+  for (const key of ["title", "subtitle", "install", "emptyTitle", "errInvalidName", "sourceProjectDsh", "installScope", "installScopeHint", "export", "import", "exportTitle", "importTitle", "importNoSkills", "browse", "browseUnavailable"]) {
     assert.equal(typeof zh[key], "string", `zh dictionary has ${key}`);
   }
+});
+
+test("pickDirectory prefers the Electron bridge and rejects when unavailable", async () => {
+  const harness = installBrowserGlobals();
+  await import("../lib/client.js?case=picker");
+  const exports = harness.loaded().factory(harness.requireMock);
+  exports.apply(harness.ctx);
+  const main = harness.registrations.find((registration) => registration.options.name === "main");
+  const pickDirectory = main.options.inject().pickDirectory;
+  const previous = globalThis.__DSH_DIRECTORY_PICKER__;
+  try {
+    globalThis.__DSH_DIRECTORY_PICKER__ = { pick: async () => "C:\\picked-folder" };
+    assert.equal(await pickDirectory(), "C:\\picked-folder");
+    delete globalThis.__DSH_DIRECTORY_PICKER__;
+    harness.ctx.get = (name) => name === "uiWorkspace"
+      ? { pickDirectory: async () => "D:\\browse-folder" }
+      : undefined;
+    assert.equal(await pickDirectory(), "D:\\browse-folder");
+    delete harness.ctx.get;
+    await assert.rejects(() => pickDirectory(), /directory picker unavailable/);
+  } finally {
+    if (previous === undefined) delete globalThis.__DSH_DIRECTORY_PICKER__;
+    else globalThis.__DSH_DIRECTORY_PICKER__ = previous;
+  }
+});
+
+test("export and import modals render from scoped state", async () => {
+  const harness = installBrowserGlobals();
+  await import("../lib/client.js?case=modals");
+  const exports = harness.loaded().factory(harness.requireMock);
+  const globalRoot = { id: "global:dsh", source: "user-dsh", path: "C:\\global", exists: true, readable: true, skillCount: 0 };
+  const wsRoot = { id: "ws:w1:dsh", source: "project-dsh", path: "C:\\ws", exists: true, readable: true, skillCount: 0 };
+  const globalScope = { kind: "global", id: "global", title: "Global", skills: [], roots: [globalRoot], stats: { total: 0 } };
+  const workspaceScope = { kind: "workspace", id: "w1", title: "W1", path: "C:\\ws", exists: true, skills: [], roots: [wsRoot], stats: { total: 0 } };
+  const state = { global: globalScope, workspaces: [workspaceScope], defaultExportDir: "C:\\exports" };
+  const t = (key) => key;
+  const exportModal = exports.ExportModal({
+    scope: globalScope,
+    state,
+    skill: null,
+    t,
+    onClose: () => {},
+    onExported: () => {},
+    pickDirectory: async () => null
+  });
+  assert.ok(exportModal);
+  const importModal = exports.ImportModal({
+    scope: workspaceScope,
+    state,
+    t,
+    language: "en",
+    onClose: () => {},
+    onImported: () => {},
+    pickDirectory: async () => null
+  });
+  assert.ok(importModal);
 });

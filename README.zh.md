@@ -37,7 +37,11 @@
 - **原生侧栏入口**——在「插件」正下方新增 **「技能」** 行；管理面板显示在主区域，不是弹窗或独立窗口。
 - **全局与工作区作用域**——全局技能一组，DSH 中已注册的每个工作区各一组。
 - **每个作用域两个目录**——同时管理 `.dsh/skills` 与 `.agents/skills`，与 DSH 官方 filesystem provider 的发现规则和优先级一致。
-- **多种安装来源**——从本地文件夹或 `.md` 文件导入、从其他工作区/全局复制、表单新建，或粘贴/读取 `SKILL.md`。
+- **多种安装来源**——从本地文件夹或 `.md` 文件导入、从其他工作区/全局复制、表单新建，或粘贴/读取 `SKILL.md`。路径输入框提供 **浏览…**，可直接打开系统文件夹选择器。
+- **图形化选择导出目录**——点击 **浏览…** 选择导出文件夹，不必手动输入绝对路径。
+- **可分享导出**——把单个技能、某个工作区的全部有效技能，或本机全部有效文件系统技能导出为一个 `.tgz` 归档到指定目录。
+- **归档导入**——选择本插件导出的 `.tgz`，预览技能列表，选择全局或任意工作区及其目标目录，再导入其中的任意子集。已解压的文件夹可用“本地文件夹”标签导入。
+- **便于分享的归档结构**——`manifest.json` 加 `skills/<id>/...`，只包含普通文件，不含符号链接或路径穿越。
 - **停用但不删除**——停用通过重命名指令文件实现，DSH 会立即停止发现；重新启用即可恢复，内容和资源保持不变。
 - **带校验的编辑**——直接编辑 `SKILL.md`；保存前按 DSH 规则校验 frontmatter、技能名称、描述和调用策略。
 - **预览与元数据**——查看全文、来源、磁盘路径、大小和更新时间，并一键复制路径。
@@ -96,12 +100,31 @@ tarball 安装是普通包副本，不是符号链接。它会替换同名的 np
 
 | 来源 | 作用 |
 | --- | --- |
-| **本地路径** | 复制包含 `SKILL.md` 的技能文件夹，或单个 `.md` 文件；支持 `~` 展开。 |
+| **本地路径** | 复制包含 `SKILL.md` 的技能文件夹，或单个 `.md` 文件；支持 `~` 展开。可点击 **浏览…** 选择文件夹。 |
 | **复制技能** | 从其他工作区或全局复制现有技能，源技能保持不变。 |
 | **新建** | 用名称、描述、可选 `whenToUse`、正文和调用策略复选框生成新的 `SKILL.md`。 |
 | **粘贴 SKILL.md** | 接受原始 `SKILL.md` 内容，或从文件读取，然后按目录包安装。 |
 
 当前浏览位置只是默认目标；你可以在同一个弹窗里安装到全局、当前工作区或任意其他工作区。
+
+### 导出技能
+
+- 在技能卡片上点击 **导出**，导出该单个技能。
+- 点击页头的 **导出**，导出整个工作区或本机全部有效文件系统技能。
+- 选择一个绝对路径的导出目录，或点击 **浏览…** 选择；插件会在该目录写入一个 `.tgz` 归档，并自动避免覆盖同名文件。
+- 只导出可解析的技能。已停用的技能也会导出，导入后作为已启用技能。
+- 归档是自包含的：`manifest.json` 加 `skills/<id>/SKILL.md` 及其资源文件。
+
+### 导入技能
+
+1. 点击页头的 **导入**。
+2. 选择 **技能包（.tgz）**，选中本插件导出的 `.tgz` / `.tar.gz`。
+3. 查看技能列表，勾选需要的技能，再选择目标作用域和目录。
+4. 点击 **导入**，选中的技能会作为启用状态安装。
+
+**本地文件夹 / .md** 标签用于导入已解压的技能文件夹或单个 `SKILL.md`；可点击 **浏览…** 选择文件夹。外部 `.zip` 不会直接解析；请先解压，再用该标签导入。
+
+同名冲突和归档内重名会在写入前拒绝。导入失败时会清理本次已创建的目标目录，不留下半成品。
 
 ### 启用、停用与卸载
 
@@ -177,7 +200,8 @@ DSH 会拒绝旧字段名 `disableModelInvocation`、`modelInvocable` 和 `userI
 ```
 
 - Host 端在 `ctx.webServer` 上注册 HTTP 接口，并从 `ctx.workspaceRegistry` 读取工作区列表。
-- `lib/skill-store.js` 是纯 Node.js 实现：扫描四个根目录、解析 frontmatter、校验名称和调用策略，并执行安装、重命名、保存和删除。
+- `lib/skill-store.js` 是纯 Node.js 实现：扫描四个根目录、解析 frontmatter、校验名称和调用策略，并执行安装、重命名、保存、删除、导出和导入。
+- `lib/skill-archive.js` 提供无第三方依赖的 USTAR + gzip 读写；归档使用 `manifest.json` 加 `skills/<id>/...` 结构。
 - 浏览器端注册 `sidebar.panellist` 条目，`order: 1`（DSH 的 **Plugins** 行是 `0`，**Automation tasks** 行是 `10`），以及对应的 `main` 面板 key。
 - 没有构建步骤；`lib/client.js` 就是随包发布的浏览器 bundle。
 
@@ -196,6 +220,9 @@ DSH 会拒绝旧字段名 `disableModelInvocation`、`modelInvocable` 和 `userI
 | `POST` | `/skill-management/api/toggle` | 启用或停用 |
 | `POST` | `/skill-management/api/save` | 校验后保存编辑过的 `SKILL.md` |
 | `POST` | `/skill-management/api/validate` | 只校验 frontmatter，不写入 |
+| `POST` | `/skill-management/api/export` | 导出单个技能、工作区或全部技能为 `.tgz` |
+| `POST` | `/skill-management/api/import/inspect` | 检查上传的归档或本机归档路径 |
+| `POST` | `/skill-management/api/import/install` | 将归档中选中的技能安装到目标目录 |
 
 HTTP API 是插件内部接口，可能在次版本之间变化。
 
@@ -206,15 +233,19 @@ HTTP API 是插件内部接口，可能在次版本之间变化。
 - 只读取和修改上面四个已知根目录内的条目。请求的 `relPath` 必须是根目录下的单个条目名；拒绝 `..`、绝对路径和路径分隔符。
 - 所有 API 请求都会在读取请求体之前经过 `connection.admit()`，并要求 `peer.principal.kind === "owner"`。
 - 编辑时会拒绝符号链接形式的 `SKILL.md`，避免保存操作跟随链接写到技能根目录之外。
-- 复制技能时只复制普通文件和目录，跳过符号链接、`.git` 和 `node_modules`，并限制文件数（400）、总大小（24 MiB）和目录深度（12）。
+- 复制或导出技能时只使用普通文件和目录，跳过符号链接、`.git` 和 `node_modules`，并对单个技能限制文件数（400）、总大小（24 MiB）和目录深度（12）。
+- 导出归档限制为 32 MiB 和 200 个技能；导入归档的路径会规范化，绝对路径或包含 `..` 的条目会被拒绝。
+- 导入会在写入前预检所有选中的名称；同名冲突或归档内重名会中止，失败时会删除本次导入创建的目标目录。
 - 卸载是永久操作，界面始终要求确认。
 
 ### 限制
 
 - 面板只管理上面四个文件系统根目录。DSH 内置或由插件运行时注册的技能（例如官方 `office` 技能，或用 `ctx.skills.register()` 注入的技能）不会列出。
 - `skill-filesystem` 额外配置的 `customSkillDirs` 不会显示。
-- 符号链接形式的指令文件可以被列出和读取，但不能通过面板编辑；复制技能时会完全跳过符号链接。
-- 没有批量操作，技能只能逐张卡片管理。
+- 符号链接形式的指令文件可以被列出和读取，但不能通过面板编辑；复制或导出技能时会完全跳过符号链接。
+- 只导出可解析的技能。已停用技能会导出，并在导入后作为启用技能；无效技能会跳过。
+- 导入只接受本插件的 `.tgz` / `.tar.gz` 格式。下载的 `.zip` 需要先解压，再通过本地文件夹标签导入。
+- 没有批量启用/停用/删除操作；导出可以覆盖整个工作区或本机。
 - 启用/停用依赖 DSH 的文件系统 watcher。如果某个会话的技能目录缓存尚未刷新，请切换会话或刷新页面。
 - HTTP API 是内部接口，可能在次版本之间变化。
 - 插件不管理技能依赖、版本或远程 registry。
@@ -226,7 +257,8 @@ HTTP API 是插件内部接口，可能在次版本之间变化。
 ```text
 lib/
   index.js          Cordis Host 入口和 HTTP API
-  skill-store.js    扫描、校验与变更逻辑
+  skill-store.js    扫描、校验、导出与导入逻辑
+  skill-archive.js  无依赖的 tar.gz 读写
   client.js         浏览器 bundle：侧栏行和主面板
 locale/
   en.json           Plugins 页面显示元数据
@@ -234,6 +266,7 @@ locale/
 test/
   api.test.mjs
   client-bundle.test.mjs
+  export-import.test.mjs
   skill-store.test.mjs
 cordis.patch.yml    插入 DSH profile 的 bundle 行
 ```
@@ -247,13 +280,14 @@ npm run check
 npm test
 ```
 
-`npm run check` 对三个发布用的 JavaScript 文件执行 `node --check`。测试使用隔离的临时目录，不会接触真实技能。
+`npm run check` 对四个发布用的 JavaScript 文件执行 `node --check`。测试使用隔离的临时目录，不会接触真实技能。
 
 如果 `node --test` 在受限沙箱里无法 spawn 子进程，可以直接逐个运行测试文件：
 
 ```bash
 node test/skill-store.test.mjs
 node test/api.test.mjs
+node test/export-import.test.mjs
 node test/client-bundle.test.mjs
 ```
 

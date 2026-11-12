@@ -110,6 +110,7 @@ test("GET /state returns global and workspace scopes for an owner", async (t) =>
   assert.equal(payload.result.workspaces.length, 1);
   assert.equal(payload.result.workspaces[0].id, "w1");
   assert.equal(payload.result.global.roots.length, 2);
+  assert.equal(typeof payload.result.defaultExportDir, "string");
 });
 
 test("POST /install, /toggle, /save and /uninstall drive the store", async (t) => {
@@ -182,4 +183,51 @@ test("unknown endpoint answers 404 and bad JSON answers 400", async (t) => {
   const malformed = await harness.call("POST", "/install", undefined, "{not json");
   assert.equal(malformed.status, 400);
   assert.equal(malformed.json().code, "bad-request");
+});
+
+test("exports a skill archive and imports it into a workspace through the API", async (t) => {
+  const harness = await setup(t);
+  const created = await harness.call("POST", "/install", {
+    targetRootId: "global:dsh",
+    source: { kind: "create", name: "portable-api", description: "Portable API skill" }
+  });
+  assert.equal(created.status, 200);
+
+  const exportDir = join(harness.root, "api-exports");
+  await mkdir(exportDir, { recursive: true });
+  const exported = await harness.call("POST", "/export", {
+    destinationDir: exportDir,
+    source: { kind: "skill", rootId: "global:dsh", relPath: "portable-api" }
+  });
+  assert.equal(exported.status, 200);
+  const exportResult = exported.json().result;
+  assert.equal(exportResult.skillCount, 1);
+  const archive = await readFile(exportResult.archivePath);
+
+  const inspected = await harness.call("POST", "/import/inspect", {
+    contentBase64: archive.toString("base64")
+  });
+  assert.equal(inspected.status, 200);
+  const inspectResult = inspected.json().result;
+  assert.equal(inspectResult.skills.length, 1);
+  assert.equal(inspectResult.skills[0].name, "portable-api");
+
+  const imported = await harness.call("POST", "/import/install", {
+    contentBase64: archive.toString("base64"),
+    targetRootId: "ws:w1:dsh",
+    selectedPaths: [inspectResult.skills[0].archivePath]
+  });
+  assert.equal(imported.status, 200);
+  const importedResult = imported.json().result;
+  assert.equal(importedResult.imported.length, 1);
+  assert.equal(importedResult.state.workspaces[0].skills.some((skill) => skill.name === "portable-api"), true);
+});
+
+test("rejects an unsupported archive on import inspection", async (t) => {
+  const harness = await setup(t);
+  const inspected = await harness.call("POST", "/import/inspect", {
+    contentBase64: Buffer.from("not a gzip archive").toString("base64")
+  });
+  assert.equal(inspected.status, 400);
+  assert.equal(inspected.json().code, "unsupported-archive");
 });
