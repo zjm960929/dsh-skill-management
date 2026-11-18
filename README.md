@@ -42,6 +42,9 @@ It is for people who install, edit, or debug skills by hand and want a safe UI i
 - **Portable export** — export one skill, every valid skill in a workspace, or every valid filesystem skill on the machine as a single `.tgz` archive in a folder you choose.
 - **Archive import** — pick a `.tgz` produced by the plugin, inspect its skills, choose global or any workspace and its target directory, then import any subset. Already-extracted folders can use the local path tab.
 - **Share-friendly archive layout** — `manifest.json` plus `skills/<id>/...`, regular files only; no symlinks or path traversal.
+- **GitHub link and update badge** — the header links to the plugin repository and shows a red dot when a newer GitHub release is available.
+- **Open skill folders** — each skill card has a **Directory** action that opens the skill's own folder in the operating system's file manager; for a flat skill it opens the root skill folder. On Windows the instruction file is selected.
+- **Two-row card actions** — Preview / Edit / Enable-Disable on the first row, Directory / Export / Uninstall on the second; Enable is green, while Disable and Uninstall use the same red.
 - **Disable without deleting** — disabling renames the instruction file so DSH stops discovering it immediately; enabling restores it with content and resources intact.
 - **Validated editing** — edit `SKILL.md` in place; the plugin validates frontmatter, skill name, description and invocation flags before saving.
 - **Preview and metadata** — inspect the full document, source, on-disk path, size and update time, and copy the path in one click.
@@ -110,14 +113,14 @@ The current view is only the default target. You can install into global, the cu
 ### Exporting skills
 
 - Use **Export** on a skill card to export that one skill.
-- Use **Export** in the header to export a whole workspace or every valid filesystem skill on the machine.
+- Use **Batch export** in the header to export a whole workspace or every valid filesystem skill on the machine.
 - Pick an absolute destination folder, or use **Browse…** to select it. The plugin writes one `.tgz` archive there and chooses a non-conflicting file name.
 - Only parseable skills are exported. Disabled skills are included and are imported as enabled skills.
 - Archives are self-contained: `manifest.json` plus `skills/<id>/SKILL.md` and its resources.
 
 ### Importing skills
 
-1. Click **Import** in the header.
+1. Click **Batch import** in the header.
 2. Choose **Skill archive (.tgz)** and select a `.tgz` / `.tar.gz` produced by this plugin.
 3. Inspect the skill list, clear or select the skills you want, then choose the target scope and directory.
 4. Click **Import**. The selected skills are installed as active skills.
@@ -133,6 +136,7 @@ Name conflicts and archive duplicate names are rejected before anything is writt
   - Flat skill: `<name>.md` → `<name>.md.disabled`
 - **Enable** reverses the rename.
 - **Uninstall** permanently deletes the skill directory or flat file, including its resources. The UI always asks for confirmation.
+- The card's **Enable** action is green, while **Disable** and **Uninstall** use the same red. The **Directory** action opens the skill's own folder; on Windows it also selects the instruction file. For a flat skill, the root skill folder opens.
 
 ## Skill format
 
@@ -223,6 +227,8 @@ All routes require an owner connection and answer `401`, `403` or `503` when the
 | `POST` | `/skill-management/api/export` | Export a skill, a workspace, or all skills to a `.tgz` |
 | `POST` | `/skill-management/api/import/inspect` | Inspect an uploaded archive or host archive path |
 | `POST` | `/skill-management/api/import/install` | Install selected skills from an archive into a target root |
+| `POST` | `/skill-management/api/reveal` | Open a skill's installation folder in the file manager |
+| `GET` | `/skill-management/api/update` | Check GitHub for a newer plugin release |
 
 The HTTP API is internal to this plugin and may change between minor releases.
 
@@ -236,6 +242,7 @@ The HTTP API is internal to this plugin and may change between minor releases.
 - Copying or exporting a skill uses only regular files and directories, skips symlinks, `.git` and `node_modules`, and caps files (400), total size (24 MiB) and folder depth (12) per skill.
 - Export archives are capped at 32 MiB and 200 skills. Imported archive paths are normalized and rejected if absolute or containing `..`.
 - Import preflights every selected name; a conflict or duplicate aborts before writing, and a mid-import failure removes the directories created by that import.
+- The **Directory** API resolves the skill through the same four known roots before opening its folder; it never opens an arbitrary path. Update checks call the public GitHub releases API and fail silently when offline.
 - Uninstall is permanent and always asks for confirmation in the UI.
 
 ### Limitations
@@ -249,6 +256,7 @@ The HTTP API is internal to this plugin and may change between minor releases.
 - Enable/disable relies on DSH's filesystem watcher. If a session's skill catalog is still cached, switch sessions or refresh the page.
 - The HTTP API is internal and may change between minor releases.
 - The plugin does not manage skill dependencies, versions or remote registries.
+- The update badge requires access to `api.github.com`; when the check fails, the GitHub button remains available without a badge.
 
 ## Development
 

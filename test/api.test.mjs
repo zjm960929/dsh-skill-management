@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { apply } from "../lib/index.js";
+import { apply, resetUpdateCache } from "../lib/index.js";
+
+const packageInfo = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+const REPOSITORY_URL = packageInfo.repository.url.replace(/^git\+/, "").replace(/\.git$/, "");
 
 function makeRequest(method, url, body) {
   const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body), "utf8")];
@@ -34,7 +37,7 @@ function makeResponse() {
   };
 }
 
-async function setup(t, {owner = true} = {}) {
+async function setup(t, {owner = true, openDirectory, checkUpdate} = {}) {
   const root = await mkdtemp(join(tmpdir(), "dsh-skill-management-api-"));
   const dshHome = join(root, "home");
   const agentsHome = join(root, "agents");
@@ -55,6 +58,15 @@ async function setup(t, {owner = true} = {}) {
   });
 
   let registration = null;
+  const openedDirectories = [];
+  const updateCheck = checkUpdate === undefined
+    ? (async () => ({
+        currentVersion: "test",
+        latestVersion: "test",
+        available: false,
+        releaseUrl: "https://example.test"
+      }))
+    : checkUpdate;
   const connection = {
     admit: () => (owner
       ? { peer: { principal: { kind: "owner" } } }
@@ -81,7 +93,10 @@ async function setup(t, {owner = true} = {}) {
     },
     logger: { warn: () => {} }
   };
-  apply(ctx);
+  apply(ctx, {
+    openDirectory: openDirectory ?? (async (path) => { openedDirectories.push(path); }),
+    checkUpdate: updateCheck
+  });
   assert.ok(registration, "web server route registered");
   assert.equal(registration.path, "/skill-management/api");
   assert.equal(registration.kind, "prefix");
@@ -98,7 +113,7 @@ async function setup(t, {owner = true} = {}) {
     return response;
   }
 
-  return { root, dshHome, agentsHome, workspacePath, call };
+  return { root, dshHome, agentsHome, workspacePath, openedDirectories, call };
 }
 
 test("GET /state returns global and workspace scopes for an owner", async (t) => {
@@ -111,6 +126,92 @@ test("GET /state returns global and workspace scopes for an owner", async (t) =>
   assert.equal(payload.result.workspaces[0].id, "w1");
   assert.equal(payload.result.global.roots.length, 2);
   assert.equal(typeof payload.result.defaultExportDir, "string");
+  assert.equal(typeof payload.result.plugin.version, "string");
+  assert.equal(payload.result.plugin.repository, REPOSITORY_URL);
+});
+
+test("GET /update and POST /reveal use the injected host actions", async (t) => {
+  const harness = await setup(t, {
+    checkUpdate: async () => ({
+      currentVersion: "0.2.4",
+      latestVersion: "0.2.5",
+      available: true,
+      releaseUrl: "https://example.test/release"
+    })
+  });
+  const update = await harness.call("GET", "/update");
+  assert.equal(update.status, 200);
+  assert.equal(update.json().result.available, true);
+  assert.equal(update.json().result.latestVersion, "0.2.5");
+
+  const install = await harness.call("POST", "/install", {
+    targetRootId: "global:dsh",
+    source: { kind: "create", name: "reveal-skill", description: "Reveal me" }
+  });
+  assert.equal(install.status, 200);
+  const entry = install.json().result.state.global.skills.find((skill) => skill.name === "reveal-skill");
+  const reveal = await harness.call("POST", "/reveal", { rootId: entry.rootId, relPath: entry.relPath });
+  assert.equal(reveal.status, 200);
+  assert.equal(reveal.json().result.filePath, join(harness.dshHome, "skills", "reveal-skill", "SKILL.md"));
+  assert.equal(harness.openedDirectories.length, 1);
+  assert.match(harness.openedDirectories[0], /reveal-skill$/);
+});
+
+test("POST /reveal reports open-failed when the host cannot launch the folder", async (t) => {
+  const harness = await setup(t, {
+    openDirectory: async () => { throw new Error("launch blocked"); }
+  });
+  const install = await harness.call("POST", "/install", {
+    targetRootId: "global:dsh",
+    source: { kind: "create", name: "blocked-reveal", description: "Blocked" }
+  });
+  const entry = install.json().result.state.global.skills.find((skill) => skill.name === "blocked-reveal");
+  const reveal = await harness.call("POST", "/reveal", { rootId: entry.rootId, relPath: entry.relPath });
+  assert.equal(reveal.status, 500);
+  assert.equal(reveal.json().code, "open-failed");
+});
+
+test("the default update check parses the latest GitHub release", async (t) => {
+  resetUpdateCache();
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /api\.github\.com\/repos\/zjm960929\/dsh-skill-management\/releases\/latest$/);
+    return {
+      ok: true,
+      async json() {
+        return { tag_name: "v9.9.9", html_url: "https://example.test/v9.9.9" };
+      }
+    };
+  };
+  const harness = await setup(t, { checkUpdate: null });
+  const response = await harness.call("GET", "/update");
+  assert.equal(response.status, 200);
+  const result = response.json().result;
+  assert.equal(result.currentVersion, packageInfo.version);
+  assert.equal(result.latestVersion, "9.9.9");
+  assert.equal(result.available, true);
+  assert.equal(result.releaseUrl, "https://example.test/v9.9.9");
+});
+
+test("the default update check reports failures and reuses the cache", async (t) => {
+  resetUpdateCache();
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    throw new Error("offline");
+  };
+  const harness = await setup(t, { checkUpdate: null });
+  const first = await harness.call("GET", "/update");
+  assert.equal(first.status, 200);
+  const firstResult = first.json().result;
+  assert.equal(firstResult.available, false);
+  assert.match(firstResult.error, /offline/);
+  const second = await harness.call("GET", "/update");
+  assert.equal(second.status, 200);
+  assert.equal(calls, 1);
 });
 
 test("POST /install, /toggle, /save and /uninstall drive the store", async (t) => {
@@ -126,6 +227,7 @@ test("POST /install, /toggle, /save and /uninstall drive the store", async (t) =
   assert.equal(installed.result.targetRootId, "global:dsh");
   assert.equal(installed.result.scopeKind, "global");
   assert.equal(installed.result.scopeId, "global");
+  assert.equal(installed.result.state.plugin.repository, REPOSITORY_URL);
   assert.equal(installed.result.state.global.skills.some((skill) => skill.name === "api-skill"), true);
 
   const entry = installed.result.state.global.skills.find((skill) => skill.name === "api-skill");
@@ -173,6 +275,10 @@ test("non-owner peers are refused before any body is read", async (t) => {
   });
   assert.equal(response.status, 403);
   assert.equal(response.json().ok, false);
+  const update = await harness.call("GET", "/update");
+  assert.equal(update.status, 403);
+  const reveal = await harness.call("POST", "/reveal", { rootId: "global:dsh", relPath: "blocked" });
+  assert.equal(reveal.status, 403);
 });
 
 test("unknown endpoint answers 404 and bad JSON answers 400", async (t) => {

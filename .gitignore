@@ -3,6 +3,7 @@ node_modules/
 .pnpm-store/
 
 # build / pack output
+# release tarballs are generated locally and never committed
 *.tgz
 dist/
 

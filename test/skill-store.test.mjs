@@ -270,6 +270,34 @@ test("uninstall removes bundles and flat files", async (t) => {
   assert.equal(await exists(join(harness.agentsHome, "skills", "flat-remove.md")), false);
 });
 
+test("revealSkill returns the target folder and instruction file", async (t) => {
+  const harness = await makeHarness(t);
+  const root = join(harness.dshHome, "skills");
+  const bundleDirectory = await writeBundle(root, "reveal-bundle", "Bundle");
+  const disabledDirectory = await writeBundle(root, "reveal-disabled", "Disabled");
+  await writeFile(join(disabledDirectory, "SKILL.md.disabled"), document("reveal-disabled", "Disabled"), "utf8");
+  await rm(join(disabledDirectory, "SKILL.md"));
+  const flatPath = join(harness.agentsHome, "skills", "reveal-flat.md");
+  await writeFile(flatPath, document("reveal-flat", "Flat"), "utf8");
+
+  const state = await harness.store.getState();
+  const bundle = state.global.skills.find((skill) => skill.name === "reveal-bundle");
+  const disabled = state.global.skills.find((skill) => skill.name === "reveal-disabled");
+  const flat = state.global.skills.find((skill) => skill.name === "reveal-flat");
+
+  const bundleTarget = await harness.store.revealSkill({ rootId: bundle.rootId, relPath: bundle.relPath });
+  assert.equal(bundleTarget.path, bundleDirectory);
+  assert.equal(bundleTarget.filePath, join(bundleDirectory, "SKILL.md"));
+
+  const disabledTarget = await harness.store.revealSkill({ rootId: disabled.rootId, relPath: disabled.relPath });
+  assert.equal(disabledTarget.path, disabledDirectory);
+  assert.match(disabledTarget.filePath, /SKILL\.md\.disabled$/);
+
+  const flatTarget = await harness.store.revealSkill({ rootId: flat.rootId, relPath: flat.relPath });
+  assert.equal(flatTarget.path, join(harness.agentsHome, "skills"));
+  assert.equal(flatTarget.filePath, flatPath);
+});
+
 test("path traversal and unknown roots are refused", async (t) => {
   const harness = await makeHarness(t);
   await writeBundle(join(harness.dshHome, "skills"), "safe", "Safe");

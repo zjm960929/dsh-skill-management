@@ -1,7 +1,7 @@
 {
   "name": "dsh-skill-management",
-  "version": "0.2.3",
-  "description": "Skill management for DeepSeek Harness — browse, install, edit, enable/disable and uninstall skills per workspace and globally, with portable .tgz export and archive import. | DeepSeek Harness 技能管理——在左侧栏管理每个工作区与全局安装的技能，支持导入、编辑、启用/停用、卸载，以及 .tgz 导出与归档导入。",
+  "version": "0.2.4",
+  "description": "Skill management for DeepSeek Harness — browse, install, edit, enable/disable and uninstall skills per workspace and globally, with portable .tgz export and archive import, folder shortcuts and GitHub update checks. | DeepSeek Harness 技能管理——在左侧栏管理每个工作区与全局安装的技能，支持导入、编辑、启用/停用、卸载，以及 .tgz 导出、归档导入、打开目录和 GitHub 更新检查。",
   "icon": "./icon.svg",
   "license": "MIT",
   "author": "ZJM <zjm960929@outlook.com> (https://github.com/zjm960929)",

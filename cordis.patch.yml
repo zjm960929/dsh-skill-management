@@ -1,4 +1,4 @@
-# dsh-skill-management bundle 层：插入技能管理插件行。
+# dsh-skill-management bundle layer: insert the skill-management plugin row.
 - insert:
     - id: dsh-skill-management
       name: 'dsh-skill-management'

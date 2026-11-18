@@ -92,6 +92,12 @@ test("client bundle registers the sidebar row and main panel", async () => {
   assert.equal(typeof sidebar.component, "function");
   assert.equal(harness.appended.length, 1, "stylesheet appended once");
   assert.match(harness.appended[0].textContent, /\.skm-actionDanger\{color:/);
+  assert.match(harness.appended[0].textContent, /\.skm-actionEnable\{color:/);
+  assert.match(harness.appended[0].textContent, /\.skm-actionDisable\{color:/);
+  assert.match(harness.appended[0].textContent, /\.skm-cardActionRow\{/);
+  assert.match(harness.appended[0].textContent, /\.skm-cardActions\{display:grid/);
+  assert.match(harness.appended[0].textContent, /\.skm-action svg\{display:block/);
+  assert.match(harness.appended[0].textContent, /\.skm-github\{/);
 
   const icon = sidebar.component({ size: 18 });
   assert.equal(typeof icon.type, "function");
@@ -121,7 +127,7 @@ test("client bundle exposes the page component and install-scope labels", async 
   const zh = harness.dictionaries.length === 0
     ? (exports.apply(harness.ctx), harness.dictionaries[0].dict.zh)
     : harness.dictionaries[0].dict.zh;
-  for (const key of ["title", "subtitle", "install", "emptyTitle", "errInvalidName", "sourceProjectDsh", "installScope", "installScopeHint", "export", "import", "exportTitle", "importTitle", "importNoSkills", "browse", "browseUnavailable"]) {
+  for (const key of ["title", "install", "emptyTitle", "errInvalidName", "sourceProjectDsh", "installScope", "installScopeHint", "export", "import", "batchExport", "batchImport", "exportTitle", "importTitle", "importNoSkills", "browse", "browseUnavailable", "actionDirectory", "githubRepo", "updateAvailable", "errOpenFailed", "directoryOpened", "previewName", "previewDescription", "previewSource", "previewPath", "previewUpdated"]) {
     assert.equal(typeof zh[key], "string", `zh dictionary has ${key}`);
   }
 });
@@ -132,8 +138,7 @@ test("pickDirectory prefers the Electron bridge and rejects when unavailable", a
   const exports = harness.loaded().factory(harness.requireMock);
   exports.apply(harness.ctx);
   const main = harness.registrations.find((registration) => registration.options.name === "main");
-  const pickDirectory = main.options.inject().pickDirectory;
-  const previous = globalThis.__DSH_DIRECTORY_PICKER__;
+  const pickDirectory = main.options.inject().pickDirectory;  const previous = globalThis.__DSH_DIRECTORY_PICKER__;
   try {
     globalThis.__DSH_DIRECTORY_PICKER__ = { pick: async () => "C:\\picked-folder" };
     assert.equal(await pickDirectory(), "C:\\picked-folder");
@@ -148,6 +153,16 @@ test("pickDirectory prefers the Electron bridge and rejects when unavailable", a
     if (previous === undefined) delete globalThis.__DSH_DIRECTORY_PICKER__;
     else globalThis.__DSH_DIRECTORY_PICKER__ = previous;
   }
+});
+
+test("GitHub link points to the release page when an update is available", async () => {
+  const harness = installBrowserGlobals();
+  await import("../lib/client.js?case=href");
+  const exports = harness.loaded().factory(harness.requireMock);
+  assert.equal(exports.githubHref("https://github.com/owner/repo", null), "https://github.com/owner/repo");
+  assert.equal(exports.githubHref("https://github.com/owner/repo", { available: false, releaseUrl: "https://example.test" }), "https://github.com/owner/repo");
+  assert.equal(exports.githubHref("https://github.com/owner/repo", { available: true, releaseUrl: "https://example.test/v1" }), "https://example.test/v1");
+  assert.equal(exports.githubHref("https://github.com/owner/repo", { available: true }), "https://github.com/owner/repo");
 });
 
 test("export and import modals render from scoped state", async () => {
@@ -180,4 +195,61 @@ test("export and import modals render from scoped state", async () => {
     pickDirectory: async () => null
   });
   assert.ok(importModal);
+});
+
+test("skill card has two action rows, a directory action, and colored toggle states", async () => {
+  const harness = installBrowserGlobals();
+  await import("../lib/client.js?case=card");
+  const exports = harness.loaded().factory(harness.requireMock);
+  const skill = {
+    rootId: "global:dsh",
+    relPath: "demo",
+    name: "demo",
+    description: "demo",
+    valid: true,
+    enabled: true,
+    format: "bundle",
+    source: "user-dsh",
+    filePath: "C:\\skills\\demo\\SKILL.md",
+    updatedAt: null,
+    size: 1,
+    invocation: { modelInvocable: true, userInvocable: true }
+  };
+  let directorySkill = null;
+  const card = exports.SkillCard({
+    skill,
+    t: (key) => key,
+    language: "en",
+    busy: null,
+    onPreview: () => {},
+    onEdit: () => {},
+    onToggle: () => {},
+    onDirectory: (item) => { directorySkill = item; },
+    onUninstall: () => {},
+    onExport: () => {}
+  });
+  const actions = card.children.find((child) => child?.props?.className === "skm-cardActions");
+  assert.ok(actions);
+  assert.equal(actions.children.length, 2);
+  const firstRow = actions.children[0].children.map((button) => button.props.className);
+  const secondRow = actions.children[1].children.map((button) => button.props.className);
+  assert.deepEqual(firstRow, ["skm-action", "skm-action", "skm-action skm-actionDisable"]);
+  assert.deepEqual(secondRow, ["skm-action", "skm-action", "skm-action skm-actionDanger"]);
+  actions.children[1].children[0].props.onClick();
+  assert.equal(directorySkill, skill);
+
+  const disabledCard = exports.SkillCard({
+    skill: { ...skill, enabled: false },
+    t: (key) => key,
+    language: "en",
+    busy: null,
+    onPreview: () => {},
+    onEdit: () => {},
+    onToggle: () => {},
+    onDirectory: () => {},
+    onUninstall: () => {},
+    onExport: () => {}
+  });
+  const disabledActions = disabledCard.children.find((child) => child?.props?.className === "skm-cardActions");
+  assert.equal(disabledActions.children[0].children[2].props.className, "skm-action skm-actionEnable");
 });
